@@ -1,0 +1,102 @@
+name: mongo-sharding-repl
+services:
+  pymongo_api:
+    container_name: pymongo_api
+    build:
+      context: api_app
+      dockerfile: Dockerfile
+    image: kazhem/pymongo_api:1.0.0
+    depends_on:
+      - mongo_router
+    ports:
+      - "8080:8080"
+    environment:
+      MONGODB_URL: "mongodb://mongo_router"
+      MONGODB_DATABASE_NAME: "somedb"
+
+  configSrv:
+    image: dh-mirror.gitverse.ru/mongo:latest
+    container_name: configSrv
+    restart: always
+    ports:
+      - "27020:27020"
+    volumes:
+      - config-data:/data/db
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.10
+    command: [ "--configsvr","--replSet", "config_server","--bind_ip_all",  "--port",  "27020" ]
+    healthcheck:
+      test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      start_period: 10s
+
+  shardA:
+    image: dh-mirror.gitverse.ru/mongo:latest
+    container_name: shardA
+    restart: always
+    ports:
+      - "27021:27021"
+    volumes:
+      - shardA-data:/data/db
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.9
+    command:
+      [
+        "--shardsvr",
+        "--replSet",
+        "shardA",
+        "--bind_ip_all",
+        "--port",
+        "27021"
+      ]
+    healthcheck:
+      test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      start_period: 10s
+
+  shardB:
+    image: dh-mirror.gitverse.ru/mongo:latest
+    container_name: shardB
+    restart: always
+    ports:
+      - "27022:27022"
+    volumes:
+      - shardB-data:/data/db
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.8
+    command: [ "--shardsvr", "--replSet", "shardB","--bind_ip_all", "--port", "27022" ]
+    healthcheck:
+      test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      start_period: 10s
+  
+  mongo_router:
+    image: mongo:latest
+    container_name: mongo_router
+    restart: always
+    ports:
+      - "27023:27023"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.7
+    command: [ "mongos","--configdb","config_server/configSrv:27020",  "--bind_ip_all","--port", "27023" ]
+    healthcheck:
+      test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      start_period: 10s
+
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 173.17.0.0/16
+
+volumes:
+  config-data:
+  shardA-data:
+  shardB-data:
