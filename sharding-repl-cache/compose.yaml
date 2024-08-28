@@ -1,0 +1,213 @@
+services:
+  pymongo_api:
+    container_name: pymongo_api
+    build:
+      context: api_app
+      dockerfile: Dockerfile
+    image: kazhem/pymongo_api:1.0.0
+    ports:
+      - 8080:8080
+    environment:
+      MONGODB_URL: "mongodb://mongo_router:27020"
+      MONGODB_DATABASE_NAME: "somedb"
+      REDIS_URL: "redis://redis:6379"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.9
+
+  shard1_1:
+    container_name: shard1_1
+    image: dh-mirror.gitverse.ru/mongo:latest
+    volumes:
+      - shard1_1_data:/data/db
+    ports:
+      - "27011:27011"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.11
+    command:
+      [
+        "--shardsvr",
+        "--bind_ip_all",
+        "--replSet",
+        "shard1",
+        "--port",
+        "27011"
+      ]
+
+  shard1_2:
+    container_name: shard1_2
+    image: dh-mirror.gitverse.ru/mongo:latest
+    volumes:
+      - shard1_2_data:/data/db
+    ports:
+      - "27012:27012"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.12
+    command:
+      [
+        "--shardsvr",
+        "--bind_ip_all",
+        "--replSet",
+        "shard1",
+        "--port",
+        "27012"
+      ]
+
+  shard1_3:
+    container_name: shard1_3
+    image: dh-mirror.gitverse.ru/mongo:latest
+    volumes:
+      - shard1_3_data:/data/db
+    ports:
+      - "27013:27013"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.13
+    command:
+      [
+        "--shardsvr",
+        "--bind_ip_all",
+        "--replSet",
+        "shard1",
+        "--port",
+        "27013"
+      ]
+
+  shard2_1:
+    container_name: shard2_1
+    image: dh-mirror.gitverse.ru/mongo:latest
+    volumes:
+      - shard2_1_data:/data/db
+    ports:
+      - "27021:27021"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.21
+    command:
+      [
+        "--shardsvr",
+        "--bind_ip_all",
+        "--replSet",
+        "shard2",
+        "--port",
+        "27021"
+      ]
+
+  shard2_2:
+    container_name: shard2_2
+    image: dh-mirror.gitverse.ru/mongo:latest
+    volumes:
+      - shard2_2_data:/data/db
+    ports:
+      - "27022:27022"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.22
+    command:
+      [
+        "--shardsvr",
+        "--bind_ip_all",
+        "--replSet",
+        "shard2",
+        "--port",
+        "27022"
+      ]
+
+  shard2_3:
+    container_name: shard2_3
+    image: dh-mirror.gitverse.ru/mongo:latest
+    volumes:
+      - shard2_3_data:/data/db
+    ports:
+      - "27023:27023"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.23
+    command:
+      [
+        "--shardsvr",
+        "--bind_ip_all",
+        "--replSet",
+        "shard2",
+        "--port",
+        "27023"
+      ]
+
+  configSrv:
+    container_name: configSrv
+    image: mongo:latest # docker образ
+    volumes:
+      - config-data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.10
+    command:
+      [
+        "--configsvr",
+        "--bind_ip_all",
+        "--replSet",
+        "config_server",
+        "--port",
+        "27017"
+      ]
+    healthcheck:
+      test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      start_period: 10s
+
+  mongo_router:
+    image: mongo:latest
+    container_name: mongo_router
+    command:
+      [
+        "mongos",
+        "--configdb",
+        "config_server/configSrv:27017",
+        "--bind_ip_all",
+        "--port",
+        "27020"
+      ]
+    ports:
+      - "27020:27020"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.8
+    healthcheck:
+      test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
+      interval: 5s
+      start_period: 10s
+
+  redis:
+    image: "redis:latest"
+    container_name: redis
+    ports:
+      - "6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    command: [ "redis-server", "/usr/local/etc/redis/redis.conf" ]
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.2
+
+volumes:
+  shard1_1_data:
+  shard1_2_data:
+  shard1_3_data:
+  shard2_1_data:
+  shard2_2_data:
+  shard2_3_data:
+  config-data:
+  redis_data:
+
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 173.17.0.0/16
